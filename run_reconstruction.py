@@ -9,6 +9,7 @@ from utils.timers import Timer
 import time
 from image_reconstructor import ImageReconstructor
 from options.inference_options import set_inference_options
+from dv import AedatFile
 
 
 if __name__ == "__main__":
@@ -39,10 +40,14 @@ if __name__ == "__main__":
     # Read sensor size from the first first line of the event file
     path_to_events = args.input_file
 
+    """
     header = pd.read_csv(path_to_events, delim_whitespace=True, header=None, names=['width', 'height'],
                          dtype={'width': np.int, 'height': np.int},
                          nrows=1)
     width, height = header.values[0]
+    """
+    with AedatFile(path_to_events) as header:
+      height, width = header['events'].size
     print('Sensor size: {} x {}'.format(width, height))
 
     # Load model

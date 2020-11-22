@@ -3,6 +3,7 @@ import zipfile
 from os.path import splitext
 import numpy as np
 from .timers import Timer
+from dv import AedatFile
 
 
 class FixedSizeEventReader:
@@ -14,19 +15,37 @@ class FixedSizeEventReader:
     def __init__(self, path_to_event_file, num_events=10000, start_index=0):
         print('Will use fixed size event windows with {} events'.format(num_events))
         print('Output frame rate: variable')
+        """
         self.iterator = pd.read_csv(path_to_event_file, delim_whitespace=True, header=None,
                                     names=['t', 'x', 'y', 'pol'],
                                     dtype={'t': np.float64, 'x': np.int16, 'y': np.int16, 'pol': np.int16},
                                     engine='c',
                                     skiprows=start_index + 1, chunksize=num_events, nrows=None, memory_map=True)
-
+        """
+        self.event_file = AedatFile(path_to_event_file)
+        i = 0
+        for e in self.event_file['events']:
+          if i >= start_index:
+            break
+          i += 1
+        self.num_events = num_events
+        
     def __iter__(self):
         return self
 
     def __next__(self):
         with Timer('Reading event window from file'):
-            event_window = self.iterator.__next__().values
-        return event_window
+            event_list = []
+            i = 0
+            for e in self.event_file['events']:
+                t, x, y, pol = float(e.timestamp)*1e-6, int(e.x), int(e.y), int(e.polarity)
+                event_list.append([t, x, y, pol])
+                if i > self.num_events:
+                    event_window = np.array(event_list)
+                    return event_window
+                i += 1
+            #event_window = self.iterator.__next__().values
+        raise StopIteration
 
 
 class FixedDurationEventReader:
@@ -42,9 +61,10 @@ class FixedDurationEventReader:
         print('Will use fixed duration event windows of size {:.2f} ms'.format(duration_ms))
         print('Output frame rate: {:.1f} Hz'.format(1000.0 / duration_ms))
         file_extension = splitext(path_to_event_file)[1]
-        assert(file_extension in ['.txt', '.zip'])
-        self.is_zip_file = (file_extension == '.zip')
+        #assert(file_extension in ['.txt', '.zip'])
+        #self.is_zip_file = (file_extension == '.zip')
 
+        """
         if self.is_zip_file:  # '.zip'
             self.zip_file = zipfile.ZipFile(path_to_event_file)
             files_in_archive = self.zip_file.namelist()
@@ -56,7 +76,13 @@ class FixedDurationEventReader:
         # ignore header + the first start_index lines
         for i in range(1 + start_index):
             self.event_file.readline()
-
+        """
+        self.event_file = AedatFile(path_to_event_file)
+        i = 0
+        for e in self.event_file['events']:
+          if i >= start_index:
+            break
+          i += 1
         self.last_stamp = None
         self.duration_s = duration_ms / 1000.0
 
@@ -72,11 +98,12 @@ class FixedDurationEventReader:
     def __next__(self):
         with Timer('Reading event window from file'):
             event_list = []
-            for line in self.event_file:
-                if self.is_zip_file:
-                    line = line.decode("utf-8")
-                t, x, y, pol = line.split(' ')
-                t, x, y, pol = float(t), int(x), int(y), int(pol)
+            for e in self.event_file['events']:
+                #if self.is_zip_file:
+                #    line = line.decode("utf-8")
+                #t, x, y, pol = line.split(' ')
+                #t, x, y, pol = float(t), int(x), int(y), int(pol)
+                t, x, y, pol = float(e.timestamp)*1e-6, int(e.x), int(e.y), int(e.polarity)
                 event_list.append([t, x, y, pol])
                 if self.last_stamp is None:
                     self.last_stamp = t
@@ -84,5 +111,5 @@ class FixedDurationEventReader:
                     self.last_stamp = t
                     event_window = np.array(event_list)
                     return event_window
-
+        
         raise StopIteration
